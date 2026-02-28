@@ -12,55 +12,40 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 
 <body>
 
     <!-- Header -->
     <header class="header">
-        <div class="header-brand">
-            <div class="logo">
-                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                    <rect width="28" height="28" rx="7" fill="url(#logoGrad)" />
-                    <path d="M7 18L12 11L16 15L21 8" stroke="#fff" stroke-width="2.2" stroke-linecap="round"
-                        stroke-linejoin="round" />
-                    <circle cx="21" cy="8" r="2" fill="#fff" />
-                    <defs>
-                        <linearGradient id="logoGrad" x1="0" y1="0" x2="28" y2="28">
-                            <stop stop-color="#6366f1" />
-                            <stop offset="1" stop-color="#a855f7" />
-                        </linearGradient>
-                    </defs>
+        <div class="header-left">
+            <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle navigation">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round">
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
                 </svg>
+            </button>
+            <div class="header-brand">
+                <div class="logo">
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                        <rect width="28" height="28" rx="7" fill="url(#logoGrad)" />
+                        <path d="M7 18L12 11L16 15L21 8" stroke="#fff" stroke-width="2.2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                        <circle cx="21" cy="8" r="2" fill="#fff" />
+                        <defs>
+                            <linearGradient id="logoGrad" x1="0" y1="0" x2="28" y2="28">
+                                <stop stop-color="#6366f1" />
+                                <stop offset="1" stop-color="#a855f7" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <h1 class="brand-name">TradeVault</h1>
             </div>
-            <h1 class="brand-name">TradeVault</h1>
         </div>
-        <nav class="header-nav">
-            <button class="nav-btn active" data-view="dashboard" id="nav-dashboard">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="7" height="7" rx="1" />
-                    <rect x="14" y="3" width="7" height="7" rx="1" />
-                    <rect x="3" y="14" width="7" height="7" rx="1" />
-                    <rect x="14" y="14" width="7" height="7" rx="1" />
-                </svg>
-                Dashboard
-            </button>
-            <button class="nav-btn" data-view="journal" id="nav-journal">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
-                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
-                </svg>
-                Journal
-            </button>
-            <button class="nav-btn" data-view="strategies" id="nav-strategies">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3" />
-                    <path
-                        d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-                </svg>
-                Strategies
-            </button>
-        </nav>
         <button class="btn-add-trade" id="btn-open-modal">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <line x1="12" y1="5" x2="12" y2="19" />
@@ -69,6 +54,75 @@
             New Trade
         </button>
     </header>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Collapsible Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <nav class="sidebar-nav">
+            <button class="nav-btn active" data-view="dashboard" id="nav-dashboard">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                </svg>
+                <span>Dashboard</span>
+            </button>
+            <button class="nav-btn" data-view="journal" id="nav-journal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+                </svg>
+                <span>Journal</span>
+            </button>
+            <button class="nav-btn" data-view="strategies" id="nav-strategies">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <path
+                        d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                </svg>
+                <span>Strategies</span>
+            </button>
+            <button class="nav-btn" data-view="charts" id="nav-charts">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+                <span>Charts</span>
+            </button>
+            <button class="nav-btn" data-view="ai" id="nav-ai">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2a4 4 0 014 4c0 1.95-1.4 3.58-3.25 3.93L12 22l-.75-12.07A4.001 4.001 0 0112 2z" />
+                    <path d="M8 10s-2 1-2 3 2 3 2 3" />
+                    <path d="M16 10s2 1 2 3-2 3-2 3" />
+                </svg>
+                <span>AI Insights</span>
+            </button>
+            <button class="nav-btn" data-view="rl-model" id="nav-rl-model">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M2 20h20" />
+                    <path d="M5 20V9l3-3 4 4 4-8 3 5v13" />
+                </svg>
+                <span>RL Model</span>
+            </button>
+        </nav>
+        <div class="sidebar-footer">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+                <span class="sidebar-version" id="user-greeting"
+                    style="font-size:0.8rem;color:var(--text-secondary);"></span>
+                <button class="btn-icon" id="btn-logout" title="Logout"
+                    style="color:var(--text-muted);border:none;background:transparent;cursor:pointer;padding:4px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                </button>
+            </div>
+            <span class="sidebar-version">TradeVault v2.0</span>
+        </div>
+    </aside>
 
     <!-- Dashboard View -->
     <main class="view active" id="view-dashboard">
@@ -264,6 +318,269 @@
                 <p>No strategies defined. Create one to link to your trades.</p>
             </div>
         </div>
+    </main>
+
+    <!-- Charts View -->
+    <main class="view" id="view-charts">
+        <div class="chart-controls">
+            <div class="search-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input type="text" id="chart-symbol-input" placeholder="Enter symbol (e.g. AAPL, BTCUSD, EURUSD)…"
+                    value="AAPL">
+            </div>
+            <button class="btn btn-primary" id="btn-load-chart">Load Chart</button>
+        </div>
+        <div class="chart-container chart-container--large" id="tradingview-container">
+            <div id="tradingview-widget"></div>
+        </div>
+    </main>
+
+    <!-- AI Suggestions View -->
+    <main class="view" id="view-ai">
+        <!-- Live Signals Panel -->
+        <div class="live-signals-panel">
+            <div class="section-header">
+                <h2>📡 Live Strategy Signals</h2>
+                <div class="live-status" id="ws-status">
+                    <span class="status-dot disconnected"></span>
+                    <span id="ws-status-text">Disconnected</span>
+                </div>
+            </div>
+            <p class="ai-subtitle">Real-time BUY/SELL signals from SMA Crossover, RSI, and Breakout strategies on live
+                Binance data.</p>
+            <div class="live-controls">
+                <div class="search-box">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input type="text" id="signal-symbol-input" placeholder="Enter crypto pair (e.g. BTCUSDT, ETHUSDT)"
+                        value="BTCUSDT">
+                </div>
+                <button class="btn btn-primary" id="btn-subscribe">Subscribe</button>
+                <button class="btn btn-secondary" id="btn-unsubscribe">Unsubscribe</button>
+            </div>
+            <div class="live-price-bar" id="live-price-bar">
+                <div class="live-price-item" id="live-price-display">
+                    <span class="live-sym" id="live-sym">—</span>
+                    <span class="live-price" id="live-price">—</span>
+                    <span class="live-change" id="live-range"></span>
+                </div>
+            </div>
+            <div class="signal-feed" id="signal-feed">
+                <div class="signal-empty">Subscribe to a symbol to see live signals.</div>
+            </div>
+        </div>
+
+        <!-- RL-Based Analysis -->
+        <div class="ai-analysis-section">
+            <div class="section-header">
+                <h2>🤖 AI Trade Insights</h2>
+                <button class="btn btn-primary" id="btn-refresh-ai">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10" />
+                        <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+                    </svg>
+                    Refresh Analysis
+                </button>
+            </div>
+            <p class="ai-subtitle">Q-Learning model trained on your trade history to identify your best and worst
+                setups.</p>
+        </div>
+        <div id="ai-message" class="ai-message hidden"></div>
+        <div class="ai-sections" id="ai-sections">
+            <div class="ai-section">
+                <h3 class="ai-section-title ai-section-title--good">✅ Favorable Setups</h3>
+                <div class="suggestions-grid" id="suggestions-favorable"></div>
+            </div>
+            <div class="ai-section">
+                <h3 class="ai-section-title ai-section-title--bad">🚫 Setups to Avoid</h3>
+                <div class="suggestions-grid" id="suggestions-avoid"></div>
+            </div>
+            <div class="ai-section">
+                <h3 class="ai-section-title ai-section-title--neutral">⚖️ Neutral Setups</h3>
+                <div class="suggestions-grid" id="suggestions-neutral"></div>
+            </div>
+        </div>
+
+        <!-- Quant Strategies Library -->
+        <div class="quant-library">
+            <div class="section-header">
+                <h2>📚 Quant Strategies Library</h2>
+            </div>
+            <p class="ai-subtitle">Published strategies from top quant & hedge fund research papers. Click "Implement"
+                to add any as a strategy in your journal.</p>
+            <div class="quant-filter-tabs">
+                <button class="quant-tab active" data-cat="all">All</button>
+                <button class="quant-tab" data-cat="momentum">Momentum</button>
+                <button class="quant-tab" data-cat="mean reversion">Mean Reversion</button>
+                <button class="quant-tab" data-cat="trend following">Trend Following</button>
+                <button class="quant-tab" data-cat="factor">Factor</button>
+                <button class="quant-tab" data-cat="statistical arbitrage">Stat Arb</button>
+                <button class="quant-tab" data-cat="volatility">Volatility</button>
+                <button class="quant-tab" data-cat="machine learning">ML</button>
+                <button class="quant-tab" data-cat="carry">Carry</button>
+                <button class="quant-tab" data-cat="event-driven">Event-Driven</button>
+                <button class="quant-tab" data-cat="high frequency">HFT</button>
+            </div>
+            <div class="quant-grid" id="quant-grid"></div>
+        </div>
+    </main>
+
+    <!-- RL Model View -->
+    <main class="view" id="view-rl-model">
+        <div class="section-header">
+            <h2>🧠 RL Trading Model — Backtest Results</h2>
+            <button class="btn btn-primary" id="btn-train-model">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                Train Model
+            </button>
+        </div>
+        <p class="ai-subtitle">Deep Q-Network (DQN) trained on 5 years of historical data with GPU acceleration. Shows
+            past performance of the RL agent, HFT Momentum, and Jim Simons Linear Regression strategies.</p>
+
+        <!-- Model Stats -->
+        <section class="stats-grid" id="rl-stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon stat-icon--pnl">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23" />
+                        <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-label">Total Return</span>
+                    <span class="stat-value" id="rl-total-return">—</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon stat-icon--win">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-label">Win Rate</span>
+                    <span class="stat-value" id="rl-win-rate">—</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon stat-icon--trades">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-label">Sharpe Ratio</span>
+                    <span class="stat-value" id="rl-sharpe">—</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon stat-icon--worst">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+                        <polyline points="17 18 23 18 23 12" />
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-label">Max Drawdown</span>
+                    <span class="stat-value" id="rl-max-dd">—</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Equity Curve Chart -->
+        <section class="rl-chart-section">
+            <div class="section-header">
+                <h3>Equity Curve</h3>
+                <div class="rl-strategy-tabs">
+                    <button class="quant-tab active" data-rl-strat="dqn">DQN Agent</button>
+                    <button class="quant-tab" data-rl-strat="hft">HFT Momentum</button>
+                    <button class="quant-tab" data-rl-strat="linreg">Jim Simons LR</button>
+                </div>
+            </div>
+            <div class="rl-chart-container">
+                <canvas id="rl-equity-chart"></canvas>
+            </div>
+        </section>
+
+        <!-- Year-by-Year Performance Table -->
+        <section class="rl-yearly-section">
+            <div class="section-header">
+                <h3>Year-by-Year Performance</h3>
+            </div>
+            <div class="table-wrapper">
+                <table class="trades-table" id="rl-yearly-table">
+                    <thead>
+                        <tr>
+                            <th>Year</th>
+                            <th>Strategy</th>
+                            <th>Return %</th>
+                            <th>Trades</th>
+                            <th>Win Rate</th>
+                            <th>Sharpe</th>
+                            <th>Max DD</th>
+                            <th>Profit Factor</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rl-yearly-body">
+                        <tr>
+                            <td colspan="8" class="empty-state"
+                                style="padding:2rem;text-align:center;color:var(--text-muted);">Train the model to see
+                                backtest results.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Strategy Details -->
+        <section class="rl-strategies-detail">
+            <div class="strategies-grid">
+                <div class="strategy-card">
+                    <div class="strategy-header">
+                        <span class="strategy-badge strategy-badge--ml">DQN</span>
+                        <h4>Deep Q-Network Agent</h4>
+                    </div>
+                    <p class="strategy-desc">3-layer neural network (128→64→32) with experience replay and target
+                        network. Trained using PyTorch with CUDA GPU acceleration.</p>
+                    <div class="strategy-meta">
+                        <span>Actions: BUY / SELL / HOLD</span>
+                        <span>Features: SMA, RSI, MACD, BB, ATR</span>
+                    </div>
+                </div>
+                <div class="strategy-card">
+                    <div class="strategy-header">
+                        <span class="strategy-badge strategy-badge--hft">HFT</span>
+                        <h4>HFT Momentum Strategy</h4>
+                    </div>
+                    <p class="strategy-desc">High-frequency microstructure strategy using VWAP deviation, tick momentum,
+                        and micro-price analysis for ultra-short-term signals.</p>
+                    <div class="strategy-meta">
+                        <span>Timeframe: Tick / 1-min</span>
+                        <span>Source: Market Microstructure</span>
+                    </div>
+                </div>
+                <div class="strategy-card">
+                    <div class="strategy-header">
+                        <span class="strategy-badge strategy-badge--quant">LR</span>
+                        <h4>Jim Simons Linear Regression</h4>
+                    </div>
+                    <p class="strategy-desc">Rolling multifactor regression on price, volume, and momentum features
+                        inspired by Renaissance Technologies' quantitative approach.</p>
+                    <div class="strategy-meta">
+                        <span>Timeframe: Daily</span>
+                        <span>Source: Renaissance Technologies</span>
+                    </div>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- Trade Modal -->

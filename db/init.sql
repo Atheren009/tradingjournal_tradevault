@@ -11,12 +11,14 @@ USE tradevault;
 CREATE TABLE IF NOT EXISTS users (
   user_id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
-  email VARCHAR(255) UNIQUE,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
   risk_profile VARCHAR(50) DEFAULT 'moderate',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Strategies
+-- Migration: add password_hash if table already exists without it
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) NOT NULL DEFAULT '' AFTER email;
 CREATE TABLE IF NOT EXISTS strategies (
   strategy_id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
@@ -82,6 +84,6 @@ CREATE TABLE IF NOT EXISTS screenshots (
   FOREIGN KEY (trade_id) REFERENCES trades(trade_id) ON DELETE CASCADE
 );
 
--- Seed default user
-INSERT IGNORE INTO users (user_id, name, email, risk_profile)
-VALUES (1, 'Trader', 'trader@tradevault.local', 'moderate');
+-- Note: Users are now created via the signup page.
+-- To migrate an existing DB, run:
+-- ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT '' AFTER email;

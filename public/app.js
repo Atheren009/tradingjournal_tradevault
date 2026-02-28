@@ -7,15 +7,37 @@
 
     const API = '';
 
+    // ---- Auth Guard ----
+    const token = localStorage.getItem('tv_token');
+    if (!token && !window.location.pathname.includes('login')) {
+        window.location.href = '/login';
+        return;
+    }
+
+    function getAuthHeaders() {
+        const t = localStorage.getItem('tv_token');
+        return t ? { Authorization: `Bearer ${t}` } : {};
+    }
+
+    function logout() {
+        localStorage.removeItem('tv_token');
+        localStorage.removeItem('tv_user');
+        window.location.href = '/login';
+    }
+
     // ---- Helpers ----
     const $ = (s) => document.querySelector(s);
     const $$ = (s) => document.querySelectorAll(s);
 
     async function api(path, opts = {}) {
         const res = await fetch(`${API}${path}`, {
-            headers: { 'Content-Type': 'application/json', ...opts.headers },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...opts.headers },
             ...opts,
         });
+        if (res.status === 401) {
+            logout();
+            throw new Error('Session expired');
+        }
         if (!res.ok) {
             const err = await res.json().catch(() => ({ error: res.statusText }));
             throw new Error(err.error || 'Request failed');
@@ -58,6 +80,26 @@
     // ---- Navigation ----
     const navBtns = $$('.nav-btn');
     const views = $$('.view');
+    const sidebar = $('#sidebar');
+    const sidebarOverlay = $('#sidebar-overlay');
+    const sidebarToggle = $('#sidebar-toggle');
+
+    function openSidebar() {
+        sidebar.classList.add('open');
+        sidebarOverlay.classList.add('open');
+    }
+
+    function closeSidebar() {
+        sidebar.classList.remove('open');
+        sidebarOverlay.classList.remove('open');
+    }
+
+    sidebarToggle.addEventListener('click', () => {
+        if (sidebar.classList.contains('open')) closeSidebar();
+        else openSidebar();
+    });
+
+    sidebarOverlay.addEventListener('click', closeSidebar);
 
     navBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -65,6 +107,7 @@
             btn.classList.add('active');
             views.forEach(v => v.classList.remove('active'));
             $(`#view-${btn.dataset.view}`).classList.add('active');
+            closeSidebar();
         });
     });
 
@@ -73,6 +116,7 @@
         $('#nav-journal').classList.add('active');
         views.forEach(v => v.classList.remove('active'));
         $('#view-journal').classList.add('active');
+        closeSidebar();
     });
 
     // ---- Stats ----
@@ -592,7 +636,11 @@
         const formData = new FormData();
         formData.append('image', file);
         try {
-            await fetch(`/api/trades/${drawerTradeId}/screenshots`, { method: 'POST', body: formData });
+            await fetch(`/api/trades/${drawerTradeId}/screenshots`, {
+                method: 'POST',
+                body: formData,
+                headers: getAuthHeaders(),
+            });
             $('#screenshot-form').reset();
             loadScreenshots(drawerTradeId);
             showToast('Screenshot uploaded');
@@ -605,18 +653,497 @@
     $('#filter-result').addEventListener('change', renderJournal);
     $('#filter-strategy').addEventListener('change', renderJournal);
 
+    // ---- TradingView Chart ----
+    let chartLoaded = false;
+
+    function loadTradingViewChart(symbol) {
+        const container = $('#tradingview-widget');
+        const sym = (symbol || 'AAPL').toUpperCase().trim();
+        container.innerHTML = '';
+
+        const widgetHTML = `
+            <iframe
+                src="https://s.tradingview.com/widgetembed/?hideideas=1&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%5D&locale=en#%7B%22symbol%22%3A%22${sym}%22%2C%22frameElementId%22%3A%22tradingview_widget%22%2C%22interval%22%3A%22D%22%2C%22hide_side_toolbar%22%3A%220%22%2C%22allow_symbol_change%22%3A%221%22%2C%22save_image%22%3A%221%22%2C%22studies%22%3A%5B%5D%2C%22theme%22%3A%22dark%22%2C%22style%22%3A%221%22%2C%22timezone%22%3A%22Etc%2FUTC%22%2C%22withdateranges%22%3A%221%22%2C%22studies_overrides%22%3A%7B%7D%2C%22utm_source%22%3A%22localhost%22%2C%22utm_medium%22%3A%22widget_new%22%2C%22utm_campaign%22%3A%22chart%22%2C%22page-uri%22%3A%22localhost%22%7D"
+                style="width:100%;height:100%;" frameborder="0" allowtransparency="true" scrolling="no" allowfullscreen>
+            </iframe>`;
+        container.innerHTML = widgetHTML;
+        chartLoaded = true;
+    }
+
+    $('#btn-load-chart').addEventListener('click', () => {
+        const sym = $('#chart-symbol-input').value.trim();
+        if (sym) loadTradingViewChart(sym);
+    });
+
+    $('#chart-symbol-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const sym = $('#chart-symbol-input').value.trim();
+            if (sym) loadTradingViewChart(sym);
+        }
+    });
+
+    // Load chart when Charts tab is first activated
+    const origNavHandler = navBtns.forEach.bind(navBtns);
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.view === 'charts' && !chartLoaded) {
+                loadTradingViewChart($('#chart-symbol-input').value || 'AAPL');
+            }
+            if (btn.dataset.view === 'ai') {
+                loadSuggestions();
+                loadQuantStrategies();
+            }
+            if (btn.dataset.view === 'rl-model') {
+                loadRLBacktest();
+            }
+        });
+    });
+
+    // ---- WebSocket Live Signals ----
+    let ws = null;
+    let lastPrice = 0;
+    const signalFeed = [];
+    const STRATEGY_LABELS = {
+        sma_crossover: 'SMA Crossover (10/30)',
+        rsi: 'RSI (14)',
+        breakout: 'Breakout (20)',
+        hft_momentum: 'HFT Momentum',
+        linear_regression: 'Linear Regression (Jim Simons)',
+    };
+
+    function connectWebSocket() {
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+        ws.onopen = () => {
+            $('#ws-status .status-dot').className = 'status-dot connected';
+            $('#ws-status-text').textContent = 'Connected';
+        };
+
+        ws.onclose = () => {
+            $('#ws-status .status-dot').className = 'status-dot disconnected';
+            $('#ws-status-text').textContent = 'Disconnected';
+            // Auto-reconnect
+            setTimeout(connectWebSocket, 3000);
+        };
+
+        ws.onerror = () => {
+            console.error('WebSocket error');
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleWSMessage(data);
+            } catch (e) { /* ignore */ }
+        };
+    }
+
+    function handleWSMessage(data) {
+        switch (data.type) {
+            case 'price':
+                updateLivePrice(data);
+                break;
+            case 'signal':
+                addSignalCard(data);
+                break;
+            case 'subscribed':
+                showToast(`Subscribed to ${data.symbol} live feed`);
+                break;
+            case 'unsubscribed':
+                showToast(`Unsubscribed from ${data.symbol}`);
+                $('#live-sym').textContent = '—';
+                $('#live-price').textContent = '—';
+                $('#live-price').className = 'live-price';
+                $('#live-range').textContent = '';
+                break;
+        }
+    }
+
+    function updateLivePrice(data) {
+        const priceEl = $('#live-price');
+        const newPrice = parseFloat(data.price);
+
+        $('#live-sym').textContent = data.symbol;
+        priceEl.textContent = '$' + newPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        if (lastPrice > 0) {
+            priceEl.className = 'live-price ' + (newPrice >= lastPrice ? 'up' : 'down');
+        }
+        lastPrice = newPrice;
+
+        if (data.high && data.low) {
+            $('#live-range').textContent = `H: $${parseFloat(data.high).toFixed(2)} · L: $${parseFloat(data.low).toFixed(2)}`;
+        }
+    }
+
+    function addSignalCard(data) {
+        signalFeed.unshift(data);
+        if (signalFeed.length > 50) signalFeed.pop();
+        renderSignalFeed();
+    }
+
+    function renderSignalFeed() {
+        const feed = $('#signal-feed');
+        if (signalFeed.length === 0) {
+            feed.innerHTML = '<div class="signal-empty">Subscribe to a symbol to see live signals.</div>';
+            return;
+        }
+
+        feed.innerHTML = signalFeed.map(s => {
+            const strengthPct = Math.round(s.strength || 0);
+            const strengthClass = strengthPct > 40 ? 'strong' : 'weak';
+            const timeStr = new Date(s.time).toLocaleTimeString();
+            const stratLabel = STRATEGY_LABELS[s.strategy] || s.strategy;
+
+            return `
+          <div class="signal-card ${s.action}">
+            <span class="signal-action ${s.action}">${s.action}</span>
+            <div class="signal-info">
+              <div class="signal-strategy">${stratLabel} · ${s.symbol}</div>
+              <div class="signal-reason">${escapeHtml(s.reason)}</div>
+            </div>
+            <div class="signal-strength">
+              <div class="signal-strength-fill ${strengthClass}" style="width:${Math.max(strengthPct, 5)}%"></div>
+            </div>
+            <span class="signal-time">${timeStr}</span>
+          </div>`;
+        }).join('');
+    }
+
+    // Subscribe/unsubscribe buttons
+    $('#btn-subscribe').addEventListener('click', () => {
+        const sym = $('#signal-symbol-input').value.trim().toUpperCase();
+        if (!sym) return showToast('Enter a symbol');
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'subscribe', symbol: sym }));
+            signalFeed.length = 0;
+            renderSignalFeed();
+        } else {
+            showToast('WebSocket not connected');
+        }
+    });
+
+    $('#btn-unsubscribe').addEventListener('click', () => {
+        const sym = $('#signal-symbol-input').value.trim().toUpperCase();
+        if (!sym) return;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'unsubscribe', symbol: sym }));
+            signalFeed.length = 0;
+            renderSignalFeed();
+        }
+    });
+
+    $('#signal-symbol-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            $('#btn-subscribe').click();
+        }
+    });
+
+    // Auto-connect WebSocket
+    connectWebSocket();
+
+    // ---- AI Suggestions ----
+    async function loadSuggestions() {
+        try {
+            const data = await api('/api/suggestions');
+            const msgEl = $('#ai-message');
+            const sectionsEl = $('#ai-sections');
+
+            if (data.message) {
+                msgEl.textContent = data.message;
+                msgEl.classList.remove('hidden');
+                sectionsEl.style.display = 'none';
+                return;
+            }
+
+            msgEl.classList.add('hidden');
+            sectionsEl.style.display = '';
+
+            renderSuggestionCards('#suggestions-favorable', data.suggestions || [], 'favorable');
+            renderSuggestionCards('#suggestions-avoid', data.avoid || [], 'avoid');
+            renderSuggestionCards('#suggestions-neutral', data.neutral || [], 'neutral');
+        } catch (e) {
+            console.error('AI suggestions error:', e);
+            const msgEl = $('#ai-message');
+            msgEl.textContent = 'Failed to load suggestions. Make sure you have completed trades with market conditions.';
+            msgEl.classList.remove('hidden');
+        }
+    }
+
+    function renderSuggestionCards(selector, items, type) {
+        const container = $(selector);
+        if (items.length === 0) {
+            container.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">No ${type} setups found yet.</p>`;
+            return;
+        }
+
+        const barClass = type === 'favorable' ? 'good' : type === 'avoid' ? 'bad' : 'meh';
+
+        container.innerHTML = items.map(s => `
+            <div class="suggestion-card ${type}">
+                <div class="suggestion-desc">${escapeHtml(s.description)}</div>
+                <div class="suggestion-tags">
+                    <span class="suggestion-tag">${s.direction}</span>
+                    <span class="suggestion-tag">${s.asset}</span>
+                    <span class="suggestion-tag">${s.trend}</span>
+                    <span class="suggestion-tag">${s.session}</span>
+                    ${s.confidence !== 'none' ? `<span class="suggestion-tag">Conf: ${s.confidence}</span>` : ''}
+                </div>
+                <div class="suggestion-score">
+                    <span>Score: ${s.score}%</span>
+                    <div class="score-bar">
+                        <div class="score-bar-fill ${barClass}" style="width: ${Math.max(s.score, 5)}%"></div>
+                    </div>
+                    <span>Q: ${s.qValue}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    $('#btn-refresh-ai').addEventListener('click', () => {
+        loadSuggestions();
+        loadQuantStrategies();
+    });
+
+    // ---- Quant Strategies Library ----
+    let quantCache = [];
+
+    async function loadQuantStrategies(category) {
+        try {
+            const cat = category || 'all';
+            const data = await api(`/api/quant-strategies?category=${encodeURIComponent(cat)}`);
+            quantCache = data;
+            renderQuantCards(data);
+        } catch (e) { console.error('Quant strategies error:', e); }
+    }
+
+    function renderQuantCards(strategies) {
+        const grid = $('#quant-grid');
+        if (strategies.length === 0) {
+            grid.innerHTML = '<p style="color: var(--text-muted); padding: 1rem;">No strategies in this category.</p>';
+            return;
+        }
+
+        grid.innerHTML = strategies.map(s => `
+            <div class="quant-card" data-qid="${s.id}">
+                <div class="quant-card-header">
+                    <h3>${escapeHtml(s.name)}</h3>
+                    <div class="quant-badges">
+                        <span class="cat-badge">${escapeHtml(s.category)}</span>
+                        <span class="diff-badge diff-badge--${s.difficulty}">${s.difficulty}</span>
+                    </div>
+                </div>
+                <p class="quant-card-desc">${escapeHtml(s.description)}</p>
+                <div class="quant-source">📄 ${escapeHtml(s.source)}</div>
+                <button class="quant-rules-toggle" data-qid="${s.id}">▸ Show Trading Rules (${s.rules.length} steps)</button>
+                <ol class="quant-rules" id="rules-${s.id}">
+                    ${s.rules.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+                </ol>
+                <div class="quant-meta">
+                    <span>📊 Assets: <span class="meta-value">${s.assets.join(', ')}</span></span>
+                    <span>⏱ <span class="meta-value">${s.timeframe}</span></span>
+                </div>
+                <p class="quant-backtest">📈 ${escapeHtml(s.backtest_note)}</p>
+                <div class="quant-card-actions">
+                    <button class="btn-implement" data-qid="${s.id}">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Implement Strategy
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        // Toggle rules
+        grid.querySelectorAll('.quant-rules-toggle').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const rules = $(`#rules-${btn.dataset.qid}`);
+                const open = rules.classList.toggle('open');
+                btn.textContent = open
+                    ? `▾ Hide Trading Rules`
+                    : `▸ Show Trading Rules (${rules.children.length} steps)`;
+            });
+        });
+
+        // Implement button → create strategy
+        grid.querySelectorAll('.btn-implement').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const s = quantCache.find(x => x.id === btn.dataset.qid);
+                if (!s) return;
+                const body = {
+                    strategy_name: s.name,
+                    timeframe: s.timeframe,
+                    description: `[${s.category}] ${s.description}\n\nSource: ${s.source}\n\nRules:\n${s.rules.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\nBacktest: ${s.backtest_note}`,
+                    risk_per_trade: 1.0,
+                };
+                try {
+                    await api('/api/strategies', { method: 'POST', body: JSON.stringify(body) });
+                    showToast(`"${s.name}" added to your strategies!`);
+                    await loadStrategies();
+                    btn.textContent = '✓ Added';
+                    btn.disabled = true;
+                    btn.style.opacity = '0.6';
+                } catch (e) { showToast('Error: ' + e.message); }
+            });
+        });
+    }
+
+    // Category filter tabs
+    $$('.quant-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            $$('.quant-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            loadQuantStrategies(tab.dataset.cat);
+        });
+    });
+
     // ---- Keyboard ----
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            if (drawerOverlay.classList.contains('open')) closeDrawer();
+            if (sidebar.classList.contains('open')) closeSidebar();
+            else if (drawerOverlay.classList.contains('open')) closeDrawer();
             else if (deleteOverlay.classList.contains('open')) closeDeleteModal();
             else if (strategyOverlay.classList.contains('open')) closeStrategyModal();
             else if (modalOverlay.classList.contains('open')) closeModal();
         }
     });
 
+    // ---- RL Model Backtest ----
+    let rlChart = null;
+    let rlData = null;
+
+    async function loadRLBacktest() {
+        try {
+            const data = await api('/api/rl-backtest');
+            rlData = data;
+            renderRLStats(data);
+            renderRLYearlyTable(data);
+            renderRLEquityChart(data, 'dqn');
+        } catch (e) {
+            console.error('RL backtest error:', e);
+            $('#rl-total-return').textContent = '—';
+            $('#rl-win-rate').textContent = '—';
+            $('#rl-sharpe').textContent = '—';
+            $('#rl-max-dd').textContent = '—';
+        }
+    }
+
+    function renderRLStats(data) {
+        if (!data || !data.summary) return;
+        const s = data.summary;
+        const retEl = $('#rl-total-return');
+        retEl.textContent = (s.total_return >= 0 ? '+' : '') + s.total_return.toFixed(1) + '%';
+        retEl.className = 'stat-value ' + (s.total_return >= 0 ? 'pnl-positive' : 'pnl-negative');
+        $('#rl-win-rate').textContent = s.win_rate.toFixed(1) + '%';
+        $('#rl-sharpe').textContent = s.sharpe_ratio.toFixed(2);
+        const ddEl = $('#rl-max-dd');
+        ddEl.textContent = s.max_drawdown.toFixed(1) + '%';
+        ddEl.className = 'stat-value pnl-negative';
+    }
+
+    function renderRLYearlyTable(data) {
+        if (!data || !data.yearly) return;
+        const body = $('#rl-yearly-body');
+        body.innerHTML = data.yearly.map(y => {
+            const retClass = y.return_pct >= 0 ? 'pnl-positive' : 'pnl-negative';
+            return `<tr>
+                <td><strong>${y.year}</strong></td>
+                <td>${escapeHtml(y.strategy)}</td>
+                <td class="${retClass}">${y.return_pct >= 0 ? '+' : ''}${y.return_pct.toFixed(1)}%</td>
+                <td>${y.trades}</td>
+                <td>${y.win_rate.toFixed(1)}%</td>
+                <td>${y.sharpe.toFixed(2)}</td>
+                <td class="pnl-negative">${y.max_dd.toFixed(1)}%</td>
+                <td>${y.profit_factor.toFixed(2)}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderRLEquityChart(data, stratKey) {
+        if (!data || !data.equity_curves || !data.equity_curves[stratKey]) return;
+        const curve = data.equity_curves[stratKey];
+        const ctx = $('#rl-equity-chart').getContext('2d');
+
+        if (rlChart) rlChart.destroy();
+
+        const colors = {
+            dqn: { border: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' },
+            hft: { border: '#06b6d4', bg: 'rgba(6, 182, 212, 0.1)' },
+            linreg: { border: '#a855f7', bg: 'rgba(168, 85, 247, 0.1)' },
+        };
+        const c = colors[stratKey] || colors.dqn;
+
+        rlChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: curve.dates,
+                datasets: [{
+                    label: stratKey === 'dqn' ? 'DQN Agent' : stratKey === 'hft' ? 'HFT Momentum' : 'Jim Simons LR',
+                    data: curve.values,
+                    borderColor: c.border,
+                    backgroundColor: c.bg,
+                    borderWidth: 2,
+                    fill: true,
+                    pointRadius: 0,
+                    tension: 0.3,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, labels: { color: '#94a3b8', font: { family: 'Inter' } } },
+                    tooltip: {
+                        backgroundColor: '#1e293b',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        titleColor: '#f1f5f9',
+                        bodyColor: '#94a3b8',
+                    },
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#64748b', maxTicksLimit: 12, font: { size: 10 } },
+                        grid: { color: 'rgba(255,255,255,0.04)' },
+                    },
+                    y: {
+                        ticks: { color: '#64748b', callback: v => v.toFixed(0) + '%', font: { size: 10 } },
+                        grid: { color: 'rgba(255,255,255,0.04)' },
+                    },
+                },
+            },
+        });
+    }
+
+    // RL strategy tab clicks
+    $$('[data-rl-strat]').forEach(tab => {
+        tab.addEventListener('click', () => {
+            $$('[data-rl-strat]').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            if (rlData) renderRLEquityChart(rlData, tab.dataset.rlStrat);
+        });
+    });
+
+    // Train model button
+    $('#btn-train-model').addEventListener('click', async () => {
+        showToast('Training started — run python rl_model/train.py on your machine');
+    });
+
     // ---- Init ----
     async function init() {
+        // Show user name in sidebar
+        try {
+            const user = JSON.parse(localStorage.getItem('tv_user') || '{}');
+            const greeting = $('#user-greeting');
+            if (greeting && user.name) greeting.textContent = `👤 ${user.name}`;
+        } catch (e) { }
+
+        // Logout button
+        const logoutBtn = $('#btn-logout');
+        if (logoutBtn) logoutBtn.addEventListener('click', logout);
+
         await loadStrategies();
         await loadTrades();
         await loadStats();
