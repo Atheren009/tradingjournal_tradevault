@@ -39,6 +39,15 @@ def fetch_data():
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [col[0] for col in df.columns]
     df.dropna(inplace=True)
+    if len(df) == 0:
+        print("\n❌ ERROR: No data was downloaded from Yahoo Finance.")
+        print("   This is usually a network/DNS issue. Please check:")
+        print("   1. Your internet connection is working")
+        print("   2. Yahoo Finance (fc.yahoo.com) is not blocked by firewall/VPN")
+        print("   3. Try again in a few minutes — Yahoo may be temporarily down")
+        print("   4. If on a corporate/school network, try a different network")
+        import sys
+        sys.exit(1)
     print(f"   Got {len(df)} trading days")
     return df
 
