@@ -1,10 +1,14 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const pool = require('./db/connection');
 const RLEngine = require('./rl/engine');
 const QUANT_STRATEGIES = require('./rl/quant-strategies');
@@ -12,8 +16,94 @@ const LiveSignalEngine = require('./rl/live-signals');
 const http = require('http');
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET || 'tradevault_secret_key_change_in_production';
+const OTP_TTL_MINUTES = 10;
+const PASSWORD_RESET_TTL_MINUTES = 15;
+const MAIL_FROM = process.env.SMTP_FROM || 'TradeVault <no-reply@tradevault.local>';
+const SMTP_SERVICE = process.env.SMTP_SERVICE || '';
+
+const mailTransport = (SMTP_SERVICE || process.env.SMTP_HOST)
+    ? nodemailer.createTransport(
+        SMTP_SERVICE
+            ? {
+                service: SMTP_SERVICE,
+                auth: process.env.SMTP_USER
+                    ? {
+                        user: process.env.SMTP_USER,
+                        pass: process.env.SMTP_PASS || '',
+                    }
+                    : undefined,
+            }
+            : {
+                host: process.env.SMTP_HOST,
+                port: Number(process.env.SMTP_PORT || 587),
+                secure: String(process.env.SMTP_SECURE || '').toLowerCase() === 'true',
+                auth: process.env.SMTP_USER
+                    ? {
+                        user: process.env.SMTP_USER,
+                        pass: process.env.SMTP_PASS || '',
+                    }
+                    : undefined,
+            }
+    )
+    : null;
+
+function issueAccessToken(user) {
+    return jwt.sign({ userId: user.user_id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+}
+
+function issuePendingToken(userId, purpose) {
+    return jwt.sign({ userId, purpose }, JWT_SECRET, { expiresIn: '10m' });
+}
+
+function hashCode(value) {
+    return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function generateOtpCode() {
+    return String(crypto.randomInt(100000, 1000000));
+}
+
+function withMinutesFromNow(minutes) {
+    return new Date(Date.now() + minutes * 60 * 1000);
+}
+
+function maskEmail(email) {
+    if (!email || !email.includes('@')) return 'your recovery email';
+    const [name, domain] = email.split('@');
+    if (!name) return `***@${domain}`;
+    const safeName = name.length <= 2
+        ? `${name[0]}*`
+        : `${name.slice(0, 2)}${'*'.repeat(Math.max(2, name.length - 2))}`;
+    return `${safeName}@${domain}`;
+}
+
+async function sendSecurityMail({ to, subject, title, message, code }) {
+    const text = `${title}\n\n${message}\n\nCode: ${code}\n\nThis code expires soon. If you did not request it, you can ignore this email.`;
+    const html = `
+        <div style="font-family:Inter,Arial,sans-serif;background:#0b0f1a;padding:24px;color:#e2e8f0">
+            <div style="max-width:520px;margin:0 auto;background:#111827;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+                <h2 style="margin:0 0 12px;font-size:22px;color:#f8fafc">${title}</h2>
+                <p style="margin:0 0 18px;line-height:1.6;color:#94a3b8">${message}</p>
+                <div style="display:inline-block;padding:14px 18px;border-radius:12px;background:#0f172a;border:1px solid rgba(99,102,241,0.35);font-size:28px;font-weight:800;letter-spacing:0.22em;color:#f8fafc">${code}</div>
+                <p style="margin:18px 0 0;line-height:1.6;color:#64748b">This code expires soon. If you did not request it, you can ignore this email.</p>
+            </div>
+        </div>
+    `;
+
+    if (mailTransport) {
+        try {
+            await mailTransport.sendMail({ from: MAIL_FROM, to, subject, text, html });
+            return 'email';
+        } catch (err) {
+            console.log('  ⚠ Email delivery failed, falling back to console:', err.message);
+        }
+    }
+
+    console.log(`\n[TradeVault Security Mail]\nTo: ${to}\nSubject: ${subject}\nCode: ${code}\n`);
+    return 'console';
+}
 
 // Middleware
 app.use(cors());
@@ -44,16 +134,30 @@ const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // ========== AUTH ROUTES ==========
 
-// DB migration: ensure password_hash column exists
+// DB migration: ensure auth and recovery columns exist
 (async () => {
     try {
-        const [cols] = await pool.query(
-            `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-             WHERE TABLE_SCHEMA = 'tradevault' AND TABLE_NAME = 'users' AND COLUMN_NAME = 'password_hash'`
-        );
-        if (cols.length === 0) {
-            await pool.query('ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT \'\'  AFTER email');
-            console.log('  ✅ Added password_hash column to users table');
+        const requiredColumns = [
+            ['password_hash', 'VARCHAR(255) NOT NULL DEFAULT \'\' AFTER email'],
+            ['recovery_email', 'VARCHAR(255) NULL AFTER password_hash'],
+            ['two_factor_enabled', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER recovery_email'],
+            ['login_otp_hash', 'VARCHAR(255) NULL AFTER two_factor_enabled'],
+            ['login_otp_expires_at', 'DATETIME NULL AFTER login_otp_hash'],
+            ['reset_otp_hash', 'VARCHAR(255) NULL AFTER login_otp_expires_at'],
+            ['reset_otp_expires_at', 'DATETIME NULL AFTER reset_otp_hash'],
+        ];
+
+        for (const [columnName, definition] of requiredColumns) {
+            const [cols] = await pool.query(
+                `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+                 WHERE TABLE_SCHEMA = 'tradevault' AND TABLE_NAME = 'users' AND COLUMN_NAME = ?`,
+                [columnName]
+            );
+
+            if (cols.length === 0) {
+                await pool.query(`ALTER TABLE users ADD COLUMN ${columnName} ${definition}`);
+                console.log(`  ✅ Added ${columnName} column to users table`);
+            }
         }
     } catch (e) {
         console.log('  ⚠ Migration check skipped:', e.message);
@@ -62,7 +166,11 @@ const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 app.post('/api/auth/signup', async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        const { name, email, password, recovery_email } = req.body;
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        const normalizedRecoveryEmail = recovery_email && recovery_email.trim()
+            ? recovery_email.trim().toLowerCase()
+            : null;
         if (!name || !email || !password) {
             return res.status(400).json({ error: 'Name, email, and password are required' });
         }
@@ -71,7 +179,7 @@ app.post('/api/auth/signup', async (req, res) => {
         }
 
         // Check if email already exists
-        const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ?', [email]);
+        const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ?', [normalizedEmail]);
         if (existing.length > 0) {
             return res.status(409).json({ error: 'An account with this email already exists' });
         }
@@ -79,15 +187,15 @@ app.post('/api/auth/signup', async (req, res) => {
         // Hash password and create user
         const password_hash = await bcrypt.hash(password, 12);
         const [result] = await pool.query(
-            'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
-            [name, email, password_hash]
+            'INSERT INTO users (name, email, password_hash, recovery_email) VALUES (?, ?, ?, ?)',
+            [name, normalizedEmail, password_hash, normalizedRecoveryEmail]
         );
 
-        const token = jwt.sign({ userId: result.insertId, email }, JWT_SECRET, { expiresIn: '30d' });
+        const token = issueAccessToken({ user_id: result.insertId, email: normalizedEmail });
 
         res.status(201).json({
             token,
-            user: { user_id: result.insertId, name, email },
+            user: { user_id: result.insertId, name, email: normalizedEmail, two_factor_enabled: false },
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -97,11 +205,12 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
+        const normalizedEmail = String(email || '').trim().toLowerCase();
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+        const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
         if (users.length === 0) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
@@ -112,12 +221,230 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        const token = jwt.sign({ userId: user.user_id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+        if (user.two_factor_enabled) {
+            const code = generateOtpCode();
+            const expiresAt = withMinutesFromNow(OTP_TTL_MINUTES);
+            const destination = user.recovery_email || user.email;
+            const deliveryMode = await sendSecurityMail({
+                to: destination,
+                subject: 'TradeVault sign-in verification code',
+                title: 'Approve your TradeVault sign-in',
+                message: `Use this one-time code to finish signing in to TradeVault. It was sent to your recovery destination: ${maskEmail(destination)}.`,
+                code,
+            });
+
+            await pool.query(
+                'UPDATE users SET login_otp_hash = ?, login_otp_expires_at = ? WHERE user_id = ?',
+                [hashCode(code), expiresAt, user.user_id]
+            );
+
+            return res.json({
+                requiresTwoFactor: true,
+                pendingToken: issuePendingToken(user.user_id, 'login-2fa'),
+                deliveryHint: maskEmail(destination),
+                deliveryMode,
+            });
+        }
+
+        const token = issueAccessToken(user);
 
         res.json({
             token,
-            user: { user_id: user.user_id, name: user.name, email: user.email },
+            user: {
+                user_id: user.user_id,
+                name: user.name,
+                email: user.email,
+                two_factor_enabled: Boolean(user.two_factor_enabled),
+            },
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/verify-2fa', async (req, res) => {
+    try {
+        const { pendingToken, code } = req.body;
+        if (!pendingToken || !code) {
+            return res.status(400).json({ error: 'Verification code is required' });
+        }
+
+        const decoded = jwt.verify(pendingToken, JWT_SECRET);
+        if (decoded.purpose !== 'login-2fa') {
+            return res.status(400).json({ error: 'Invalid verification session' });
+        }
+
+        const [users] = await pool.query(
+            'SELECT user_id, name, email, two_factor_enabled, login_otp_hash, login_otp_expires_at FROM users WHERE user_id = ?',
+            [decoded.userId]
+        );
+        if (users.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const user = users[0];
+        const isExpired = !user.login_otp_expires_at || new Date(user.login_otp_expires_at).getTime() < Date.now();
+        if (!user.login_otp_hash || isExpired) {
+            return res.status(400).json({ error: 'This verification code has expired. Please sign in again.' });
+        }
+
+        if (hashCode(code.trim()) !== user.login_otp_hash) {
+            return res.status(401).json({ error: 'Invalid verification code' });
+        }
+
+        await pool.query(
+            'UPDATE users SET login_otp_hash = NULL, login_otp_expires_at = NULL WHERE user_id = ?',
+            [user.user_id]
+        );
+
+        res.json({
+            token: issueAccessToken(user),
+            user: {
+                user_id: user.user_id,
+                name: user.name,
+                email: user.email,
+                two_factor_enabled: Boolean(user.two_factor_enabled),
+            },
+        });
+    } catch (err) {
+        if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+            return res.status(401).json({ error: 'Verification session expired. Please sign in again.' });
+        }
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/resend-2fa', async (req, res) => {
+    try {
+        const { pendingToken } = req.body;
+        if (!pendingToken) {
+            return res.status(400).json({ error: 'Verification session is required' });
+        }
+
+        const decoded = jwt.verify(pendingToken, JWT_SECRET);
+        if (decoded.purpose !== 'login-2fa') {
+            return res.status(400).json({ error: 'Invalid verification session' });
+        }
+
+        const [users] = await pool.query(
+            'SELECT user_id, email, recovery_email, two_factor_enabled FROM users WHERE user_id = ?',
+            [decoded.userId]
+        );
+        if (users.length === 0 || !users[0].two_factor_enabled) {
+            return res.status(400).json({ error: 'Two-step verification is not enabled for this account' });
+        }
+
+        const user = users[0];
+        const code = generateOtpCode();
+        const expiresAt = withMinutesFromNow(OTP_TTL_MINUTES);
+        const destination = user.recovery_email || user.email;
+        const deliveryMode = await sendSecurityMail({
+            to: destination,
+            subject: 'TradeVault sign-in verification code',
+            title: 'Here is your new TradeVault sign-in code',
+            message: `Use this refreshed code to complete your sign-in. It was sent to ${maskEmail(destination)}.`,
+            code,
+        });
+
+        await pool.query(
+            'UPDATE users SET login_otp_hash = ?, login_otp_expires_at = ? WHERE user_id = ?',
+            [hashCode(code), expiresAt, user.user_id]
+        );
+
+        res.json({
+            success: true,
+            deliveryHint: maskEmail(destination),
+            deliveryMode,
+        });
+    } catch (err) {
+        if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+            return res.status(401).json({ error: 'Verification session expired. Please sign in again.' });
+        }
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/request-recovery', async (req, res) => {
+    try {
+        const { email } = req.body;
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        const [users] = await pool.query(
+            'SELECT user_id, email, recovery_email FROM users WHERE email = ?',
+            [normalizedEmail]
+        );
+
+        if (users.length > 0) {
+            const user = users[0];
+            const code = generateOtpCode();
+            const expiresAt = withMinutesFromNow(PASSWORD_RESET_TTL_MINUTES);
+            const destination = user.recovery_email || user.email;
+
+            await pool.query(
+                'UPDATE users SET reset_otp_hash = ?, reset_otp_expires_at = ? WHERE user_id = ?',
+                [hashCode(code), expiresAt, user.user_id]
+            );
+
+            await sendSecurityMail({
+                to: destination,
+                subject: 'TradeVault password reset code',
+                title: 'Reset your TradeVault password',
+                message: `Use this code to recover your TradeVault account. It was delivered to ${maskEmail(destination)}.`,
+                code,
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'If an account exists for that email, a recovery code has been sent.',
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+        const { email, code, newPassword } = req.body;
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        if (!email || !code || !newPassword) {
+            return res.status(400).json({ error: 'Email, recovery code, and new password are required' });
+        }
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        }
+
+        const [users] = await pool.query(
+            'SELECT user_id, reset_otp_hash, reset_otp_expires_at FROM users WHERE email = ?',
+            [normalizedEmail]
+        );
+        if (users.length === 0) {
+            return res.status(400).json({ error: 'Invalid recovery request' });
+        }
+
+        const user = users[0];
+        const isExpired = !user.reset_otp_expires_at || new Date(user.reset_otp_expires_at).getTime() < Date.now();
+        if (!user.reset_otp_hash || isExpired) {
+            return res.status(400).json({ error: 'This recovery code has expired. Request a new one.' });
+        }
+
+        if (hashCode(code.trim()) !== user.reset_otp_hash) {
+            return res.status(401).json({ error: 'Invalid recovery code' });
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, 12);
+        await pool.query(
+            `UPDATE users
+             SET password_hash = ?, reset_otp_hash = NULL, reset_otp_expires_at = NULL,
+                 login_otp_hash = NULL, login_otp_expires_at = NULL
+             WHERE user_id = ?`,
+            [passwordHash, user.user_id]
+        );
+
+        res.json({ success: true, message: 'Password updated successfully. You can sign in now.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -144,6 +471,71 @@ function authMiddleware(req, res, next) {
 app.use('/api', (req, res, next) => {
     if (req.path.startsWith('/auth/')) return next();
     return authMiddleware(req, res, next);
+});
+
+app.get('/api/security/status', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            'SELECT email, recovery_email, two_factor_enabled FROM users WHERE user_id = ?',
+            [req.userId]
+        );
+        if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+        const user = rows[0];
+        const destination = user.recovery_email || user.email;
+
+        res.json({
+            twoFactorEnabled: Boolean(user.two_factor_enabled),
+            recoveryEmail: user.recovery_email || '',
+            recoveryDestinationMasked: maskEmail(destination),
+            mailDeliveryMode: mailTransport ? 'email' : 'console',
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/security/settings', async (req, res) => {
+    try {
+        const { currentPassword, recoveryEmail, twoFactorEnabled } = req.body;
+        if (!currentPassword) {
+            return res.status(400).json({ error: 'Current password is required to update security settings' });
+        }
+
+        const [rows] = await pool.query(
+            'SELECT user_id, email, password_hash FROM users WHERE user_id = ?',
+            [req.userId]
+        );
+        if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+        const user = rows[0];
+        const valid = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!valid) {
+            return res.status(401).json({ error: 'Current password is incorrect' });
+        }
+
+        const normalizedRecoveryEmail = recoveryEmail && recoveryEmail.trim()
+            ? recoveryEmail.trim().toLowerCase()
+            : null;
+
+        await pool.query(
+            `UPDATE users
+             SET recovery_email = ?, two_factor_enabled = ?, login_otp_hash = NULL, login_otp_expires_at = NULL
+             WHERE user_id = ?`,
+            [normalizedRecoveryEmail, twoFactorEnabled ? 1 : 0, req.userId]
+        );
+
+        const destination = normalizedRecoveryEmail || user.email;
+        res.json({
+            success: true,
+            twoFactorEnabled: Boolean(twoFactorEnabled),
+            recoveryEmail: normalizedRecoveryEmail || '',
+            recoveryDestinationMasked: maskEmail(destination),
+            mailDeliveryMode: mailTransport ? 'email' : 'console',
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.get('/api/strategies', async (req, res) => {
@@ -565,9 +957,25 @@ app.get('/api/rl-model-info', (req, res) => {
 // ========== START ==========
 
 const httpServer = http.createServer(app);
-const signalEngine = new LiveSignalEngine(httpServer);
+
+httpServer.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+        console.error(`\n  ❌ Port ${PORT} is already in use.`);
+        console.error(`  Try one of these commands:`);
+        console.error(`  1. lsof -iTCP:${PORT} -sTCP:LISTEN -n -P`);
+        console.error(`  2. kill <PID>`);
+        console.error(`  3. PORT=${PORT + 1} npm start\n`);
+        process.exitCode = 1;
+        return;
+    }
+
+    console.error('\n  ❌ Server failed to start:', err.message);
+    process.exitCode = 1;
+});
 
 httpServer.listen(PORT, () => {
+    new LiveSignalEngine(httpServer);
     console.log(`\n  🚀 TradeVault server running at http://localhost:${PORT}`);
-    console.log(`  📡 WebSocket live signals at ws://localhost:${PORT}/ws\n`);
+    console.log(`  📡 WebSocket live signals at ws://localhost:${PORT}/ws`);
+    console.log(`  ✉️ Recovery email delivery: ${mailTransport ? 'SMTP configured' : 'console fallback'}\n`);
 });

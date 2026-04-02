@@ -131,12 +131,118 @@
         }
 
         /* Auth container */
+        .login-shell {
+            position: relative;
+            z-index: 1;
+            width: min(1180px, 100%);
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(360px, 440px);
+            align-items: center;
+            gap: clamp(1.5rem, 4vw, 3rem);
+            padding: 1.5rem;
+        }
+
+        .spline-panel {
+            position: relative;
+            min-height: 680px;
+            border-radius: 28px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background:
+                radial-gradient(circle at top left, rgba(99, 102, 241, 0.24), transparent 38%),
+                linear-gradient(160deg, rgba(9, 13, 26, 0.9), rgba(6, 8, 15, 0.72));
+            box-shadow: 0 35px 80px rgba(0, 0, 0, 0.45);
+            overflow: hidden;
+            isolation: isolate;
+        }
+
+        .spline-panel::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(125deg, rgba(6, 8, 15, 0.15), rgba(6, 8, 15, 0.7) 58%, rgba(6, 8, 15, 0.92)),
+                radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.09), transparent 32%);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .spline-panel::after {
+            content: '';
+            position: absolute;
+            inset: auto 24px 24px auto;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(168, 85, 247, 0.18), transparent 68%);
+            filter: blur(16px);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .spline-copy {
+            position: relative;
+            z-index: 2;
+            max-width: 340px;
+            padding: 2rem;
+        }
+
+        .spline-copy h2 {
+            font-size: clamp(2rem, 3vw, 3.15rem);
+            line-height: 1.02;
+            letter-spacing: -0.045em;
+            color: #f8fafc;
+        }
+
+        .spline-copy p {
+            margin-top: 1rem;
+            max-width: 28rem;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.65;
+        }
+
+        .spline-note {
+            position: absolute;
+            left: 2rem;
+            right: 2rem;
+            bottom: 2rem;
+            z-index: 2;
+            padding: 1rem 1.1rem;
+            border-radius: 16px;
+            background: rgba(10, 14, 26, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(16px);
+        }
+
+        .spline-note strong {
+            display: block;
+            font-size: 0.88rem;
+            color: #e2e8f0;
+        }
+
+        .spline-note p {
+            margin-top: 0.35rem;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            line-height: 1.5;
+        }
+
+        spline-viewer.login-spline {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+        }
+
         .auth-container {
             position: relative;
             z-index: 1;
             width: 100%;
             max-width: 440px;
-            padding: 1.5rem;
+            padding: 0;
+            margin-left: auto;
         }
 
         .auth-card {
@@ -235,9 +341,11 @@
 
         .input-wrapper {
             position: relative;
+            display: flex;
+            align-items: center;
         }
 
-        .input-wrapper svg {
+        .input-wrapper > svg {
             position: absolute;
             left: 12px;
             top: 50%;
@@ -249,7 +357,7 @@
 
         .form-input {
             width: 100%;
-            padding: 0.72rem 0.85rem 0.72rem 2.5rem;
+            padding: 0.72rem 3rem 0.72rem 2.5rem;
             background: var(--bg-input);
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
@@ -277,7 +385,7 @@
         /* Password toggle */
         .password-toggle {
             position: absolute;
-            right: 10px;
+            right: 0.7rem;
             top: 50%;
             transform: translateY(-50%);
             background: none;
@@ -285,7 +393,16 @@
             color: var(--text-muted);
             cursor: pointer;
             padding: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             transition: color 0.2s;
+        }
+
+        .password-toggle svg {
+            position: static;
+            transform: none;
+            pointer-events: none;
         }
 
         .password-toggle:hover {
@@ -337,6 +454,42 @@
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .auth-helper {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            line-height: 1.6;
+        }
+
+        .auth-inline-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-top: -0.25rem;
+        }
+
+        .auth-link-btn {
+            padding: 0;
+            border: none;
+            background: none;
+            color: var(--accent-hover);
+            font: inherit;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .auth-link-btn:hover {
+            text-decoration: underline;
+        }
+
+        .auth-back-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
         }
 
         /* Error / success messages */
@@ -436,7 +589,42 @@
                 font-size: 1.4rem;
             }
         }
+
+        @media (max-width: 980px) {
+            .login-shell {
+                grid-template-columns: 1fr;
+                max-width: 520px;
+            }
+
+            .spline-panel {
+                min-height: 260px;
+                order: 2;
+            }
+
+            .auth-container {
+                max-width: none;
+                margin-left: 0;
+            }
+
+            .spline-copy {
+                padding: 1.5rem;
+                max-width: 100%;
+            }
+
+            .spline-copy h2 {
+                font-size: 1.75rem;
+            }
+
+            .spline-note {
+                position: relative;
+                left: auto;
+                right: auto;
+                bottom: auto;
+                margin: 0 1.5rem 1.5rem;
+            }
+        }
     </style>
+    <script type="module" src="https://unpkg.com/@splinetool/viewer/build/spline-viewer.js"></script>
 </head>
 
 <body>
@@ -446,8 +634,21 @@
     <div class="orb orb--2"></div>
     <div class="orb orb--3"></div>
 
-    <div class="auth-container">
-        <div class="auth-card">
+    <div class="login-shell">
+        <section class="spline-panel" id="spline-panel" aria-hidden="true">
+            <div class="spline-copy">
+                <h2>Review every trade with sharper context and better discipline.</h2>
+                <p>TradeVault combines journaling, execution review, market context, and AI-assisted pattern spotting so you can turn raw trades into a repeatable edge.</p>
+            </div>
+            <spline-viewer class="login-spline" id="login-spline" loading="eager" hidden></spline-viewer>
+            <div class="spline-note" id="spline-note">
+                <strong>Spline is ready to plug in.</strong>
+                <p>Replace the `SPLINE_SCENE_URL` value in this file with your exported viewer URL to render your 3D scene on the login page.</p>
+            </div>
+        </section>
+
+        <div class="auth-container">
+            <div class="auth-card">
             <!-- Brand -->
             <div class="auth-brand">
                 <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
@@ -512,10 +713,38 @@
                         </button>
                     </div>
                 </div>
+                <div class="auth-inline-actions">
+                    <span class="auth-helper">If 2-step verification is enabled, we’ll email a one-time code.</span>
+                    <button type="button" class="auth-link-btn" id="btn-show-recovery">Forgot password?</button>
+                </div>
                 <button type="submit" class="btn-auth" id="btn-login">
                     <span class="btn-text">Sign In</span>
                     <div class="spinner"></div>
                 </button>
+            </form>
+
+            <form class="auth-form" id="form-verify" autocomplete="one-time-code">
+                <div class="form-group">
+                    <label for="verify-code">Verification Code</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="verify-code" class="form-input" placeholder="6-digit code" inputmode="numeric"
+                            pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M9 12l2 2 4-4" />
+                            <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+                        </svg>
+                    </div>
+                </div>
+                <p class="auth-helper" id="verify-helper">Enter the code we sent to your recovery destination.</p>
+                <button type="submit" class="btn-auth" id="btn-verify">
+                    <span class="btn-text">Verify &amp; Continue</span>
+                    <div class="spinner"></div>
+                </button>
+                <div class="auth-back-actions">
+                    <button type="button" class="auth-link-btn" id="btn-back-login">Back to sign in</button>
+                    <button type="button" class="auth-link-btn" id="btn-resend-2fa">Resend code</button>
+                </div>
             </form>
 
             <!-- Signup Form -->
@@ -541,6 +770,17 @@
                             stroke-width="2">
                             <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
                             <polyline points="22,6 12,13 2,6" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="signup-recovery-email">Recovery Email</label>
+                    <div class="input-wrapper">
+                        <input type="email" id="signup-recovery-email" class="form-input"
+                            placeholder="Optional backup email for recovery" autocomplete="email">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
                         </svg>
                     </div>
                 </div>
@@ -582,11 +822,94 @@
                 </button>
             </form>
 
+            <form class="auth-form" id="form-recovery-request" autocomplete="on">
+                <div class="form-group">
+                    <label for="recovery-email">Account Email</label>
+                    <div class="input-wrapper">
+                        <input type="email" id="recovery-email" class="form-input" placeholder="you@example.com" required
+                            autocomplete="email">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                            <polyline points="22,6 12,13 2,6" />
+                        </svg>
+                    </div>
+                </div>
+                <p class="auth-helper">We’ll send a recovery code to your recovery email. If no recovery email is set, we’ll use your account email instead.</p>
+                <button type="submit" class="btn-auth" id="btn-request-recovery">
+                    <span class="btn-text">Send Recovery Code</span>
+                    <div class="spinner"></div>
+                </button>
+                <div class="auth-back-actions">
+                    <button type="button" class="auth-link-btn" id="btn-back-from-recovery-request">Back to sign in</button>
+                </div>
+            </form>
+
+            <form class="auth-form" id="form-recovery-reset" autocomplete="on">
+                <div class="form-group">
+                    <label for="reset-email">Account Email</label>
+                    <div class="input-wrapper">
+                        <input type="email" id="reset-email" class="form-input" placeholder="you@example.com" required
+                            autocomplete="email">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                            <polyline points="22,6 12,13 2,6" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="reset-code">Recovery Code</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="reset-code" class="form-input" placeholder="6-digit code" inputmode="numeric"
+                            pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M12 8v4l2.5 2.5" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="reset-password">New Password</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="reset-password" class="form-input" placeholder="New password" required
+                            autocomplete="new-password" minlength="6">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0110 0v4" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="reset-confirm">Confirm New Password</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="reset-confirm" class="form-input" placeholder="Confirm new password"
+                            required autocomplete="new-password" minlength="6">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                            <polyline points="22 4 12 14.01 9 11.01" />
+                        </svg>
+                    </div>
+                </div>
+                <button type="submit" class="btn-auth" id="btn-reset-password">
+                    <span class="btn-text">Reset Password</span>
+                    <div class="spinner"></div>
+                </button>
+                <div class="auth-back-actions">
+                    <button type="button" class="auth-link-btn" id="btn-back-from-reset">Back to sign in</button>
+                    <button type="button" class="auth-link-btn" id="btn-send-new-code">Request a new code</button>
+                </div>
+            </form>
+
             <!-- Footer -->
             <div class="auth-footer">
                 <p>Powered by advanced RL models &amp; quantitative strategies</p>
             </div>
         </div>
+    </div>
     </div>
 
     <script>
@@ -595,10 +918,22 @@
 
             const $ = (s) => document.querySelector(s);
             const $$ = (s) => document.querySelectorAll(s);
+            const SPLINE_SCENE_URL = 'https://prod.spline.design/Yn3XaFV5s3tl6nQB/scene.splinecode';
 
             // If already logged in, redirect
             if (localStorage.getItem('tv_token')) {
                 window.location.href = '/';
+            }
+
+            const splineViewer = $('#login-spline');
+            const splineNote = $('#spline-note');
+            const hasSplineScene = /^https:\/\/prod\.spline\.design\/.+\/scene\.splinecode$/i.test(SPLINE_SCENE_URL)
+                && !SPLINE_SCENE_URL.includes('[YOUR-EXPORT-ID]');
+
+            if (hasSplineScene) {
+                splineViewer.hidden = false;
+                splineViewer.setAttribute('url', SPLINE_SCENE_URL);
+                splineNote.hidden = true;
             }
 
             // Tab switching
@@ -606,19 +941,31 @@
             const tabSignup = $('#tab-signup');
             const formLogin = $('#form-login');
             const formSignup = $('#form-signup');
+            const formVerify = $('#form-verify');
+            const formRecoveryRequest = $('#form-recovery-request');
+            const formRecoveryReset = $('#form-recovery-reset');
             const msgEl = $('#auth-msg');
+            const authForms = {
+                login: formLogin,
+                signup: formSignup,
+                verify: formVerify,
+                recoveryRequest: formRecoveryRequest,
+                recoveryReset: formRecoveryReset,
+            };
+            let pendingTwoFactorToken = '';
 
-            function switchTab(tab) {
-                tabLogin.classList.toggle('active', tab === 'login');
-                tabSignup.classList.toggle('active', tab === 'signup');
-                formLogin.classList.toggle('active', tab === 'login');
-                formSignup.classList.toggle('active', tab === 'signup');
+            function switchView(view) {
+                Object.entries(authForms).forEach(([key, form]) => {
+                    form.classList.toggle('active', key === view);
+                });
+                tabLogin.classList.toggle('active', view === 'login');
+                tabSignup.classList.toggle('active', view === 'signup');
                 msgEl.className = 'auth-msg';
                 msgEl.textContent = '';
             }
 
-            tabLogin.addEventListener('click', () => switchTab('login'));
-            tabSignup.addEventListener('click', () => switchTab('signup'));
+            tabLogin.addEventListener('click', () => switchView('login'));
+            tabSignup.addEventListener('click', () => switchView('signup'));
 
             // Password toggle
             $$('.password-toggle').forEach(btn => {
@@ -648,12 +995,16 @@
                 return data;
             }
 
+            function setLoading(btn, loading) {
+                btn.classList.toggle('loading', loading);
+                btn.disabled = loading;
+            }
+
             // Login
             formLogin.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const btn = $('#btn-login');
-                btn.classList.add('loading');
-                btn.disabled = true;
+                setLoading(btn, true);
                 msgEl.className = 'auth-msg';
 
                 try {
@@ -661,15 +1012,63 @@
                         email: $('#login-email').value.trim(),
                         password: $('#login-password').value,
                     });
+
+                    if (data.requiresTwoFactor) {
+                        pendingTwoFactorToken = data.pendingToken;
+                        $('#verify-code').value = '';
+                        $('#verify-helper').textContent = `Enter the 6-digit code sent to ${data.deliveryHint}.${data.deliveryMode === 'console' ? ' On local setup, the code may be printed in your server terminal.' : ''}`;
+                        switchView('verify');
+                        showMsg('success', 'Password verified. Enter your verification code to continue.');
+                        return;
+                    }
+
                     localStorage.setItem('tv_token', data.token);
                     localStorage.setItem('tv_user', JSON.stringify(data.user));
                     showMsg('success', 'Welcome back! Redirecting...');
                     setTimeout(() => { window.location.href = '/'; }, 600);
                 } catch (err) {
                     showMsg('error', err.message);
-                    btn.classList.remove('loading');
-                    btn.disabled = false;
+                } finally {
+                    setLoading(btn, false);
                 }
+            });
+
+            formVerify.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const btn = $('#btn-verify');
+                setLoading(btn, true);
+
+                try {
+                    const data = await authApi('/api/auth/verify-2fa', {
+                        pendingToken: pendingTwoFactorToken,
+                        code: $('#verify-code').value.trim(),
+                    });
+                    localStorage.setItem('tv_token', data.token);
+                    localStorage.setItem('tv_user', JSON.stringify(data.user));
+                    showMsg('success', 'Verification successful. Redirecting...');
+                    setTimeout(() => { window.location.href = '/'; }, 600);
+                } catch (err) {
+                    showMsg('error', err.message);
+                } finally {
+                    setLoading(btn, false);
+                }
+            });
+
+            $('#btn-resend-2fa').addEventListener('click', async () => {
+                if (!pendingTwoFactorToken) return;
+                try {
+                    const data = await authApi('/api/auth/resend-2fa', {
+                        pendingToken: pendingTwoFactorToken,
+                    });
+                    showMsg('success', `A fresh verification code was sent to ${data.deliveryHint}.${data.deliveryMode === 'console' ? ' Check the server terminal as well.' : ''}`);
+                } catch (err) {
+                    showMsg('error', err.message);
+                }
+            });
+
+            $('#btn-back-login').addEventListener('click', () => {
+                pendingTwoFactorToken = '';
+                switchView('login');
             });
 
             // Signup
@@ -687,14 +1086,14 @@
                     return showMsg('error', 'Password must be at least 6 characters');
                 }
 
-                btn.classList.add('loading');
-                btn.disabled = true;
+                setLoading(btn, true);
                 msgEl.className = 'auth-msg';
 
                 try {
                     const data = await authApi('/api/auth/signup', {
                         name: $('#signup-name').value.trim(),
                         email: $('#signup-email').value.trim(),
+                        recovery_email: $('#signup-recovery-email').value.trim(),
                         password: password,
                     });
                     localStorage.setItem('tv_token', data.token);
@@ -703,8 +1102,81 @@
                     setTimeout(() => { window.location.href = '/'; }, 600);
                 } catch (err) {
                     showMsg('error', err.message);
-                    btn.classList.remove('loading');
-                    btn.disabled = false;
+                } finally {
+                    setLoading(btn, false);
+                }
+            });
+
+            $('#btn-show-recovery').addEventListener('click', () => {
+                $('#recovery-email').value = $('#login-email').value.trim();
+                $('#reset-email').value = $('#login-email').value.trim();
+                switchView('recoveryRequest');
+            });
+
+            $('#btn-back-from-recovery-request').addEventListener('click', () => switchView('login'));
+            $('#btn-back-from-reset').addEventListener('click', () => switchView('login'));
+
+            formRecoveryRequest.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const btn = $('#btn-request-recovery');
+                setLoading(btn, true);
+
+                try {
+                    const email = $('#recovery-email').value.trim();
+                    await authApi('/api/auth/request-recovery', { email });
+                    $('#reset-email').value = email;
+                    $('#reset-code').value = '';
+                    $('#reset-password').value = '';
+                    $('#reset-confirm').value = '';
+                    switchView('recoveryReset');
+                    showMsg('success', 'If the account exists, a recovery code has been sent. On local setup, it may also appear in the server terminal.');
+                } catch (err) {
+                    showMsg('error', err.message);
+                } finally {
+                    setLoading(btn, false);
+                }
+            });
+
+            $('#btn-send-new-code').addEventListener('click', async () => {
+                const email = $('#reset-email').value.trim() || $('#recovery-email').value.trim();
+                if (!email) {
+                    return showMsg('error', 'Enter your account email first');
+                }
+                try {
+                    await authApi('/api/auth/request-recovery', { email });
+                    showMsg('success', 'A fresh recovery code has been requested. Check your recovery destination or the server terminal.');
+                } catch (err) {
+                    showMsg('error', err.message);
+                }
+            });
+
+            formRecoveryReset.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const btn = $('#btn-reset-password');
+                const newPassword = $('#reset-password').value;
+                const confirmPassword = $('#reset-confirm').value;
+
+                if (newPassword !== confirmPassword) {
+                    return showMsg('error', 'New password and confirmation do not match');
+                }
+                if (newPassword.length < 6) {
+                    return showMsg('error', 'Password must be at least 6 characters');
+                }
+
+                setLoading(btn, true);
+                try {
+                    await authApi('/api/auth/reset-password', {
+                        email: $('#reset-email').value.trim(),
+                        code: $('#reset-code').value.trim(),
+                        newPassword,
+                    });
+                    switchView('login');
+                    $('#login-email').value = $('#reset-email').value.trim();
+                    showMsg('success', 'Password updated. You can sign in now.');
+                } catch (err) {
+                    showMsg('error', err.message);
+                } finally {
+                    setLoading(btn, false);
                 }
             });
         })();

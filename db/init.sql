@@ -13,6 +13,12 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(100) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
+  recovery_email VARCHAR(255) NULL,
+  two_factor_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  login_otp_hash VARCHAR(255) NULL,
+  login_otp_expires_at DATETIME NULL,
+  reset_otp_hash VARCHAR(255) NULL,
+  reset_otp_expires_at DATETIME NULL,
   risk_profile VARCHAR(50) DEFAULT 'moderate',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

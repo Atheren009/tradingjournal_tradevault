@@ -71,11 +71,138 @@
         setTimeout(() => el.classList.remove('show'), 2500);
     }
 
+    function normalizeDateKey(value) {
+        if (!value) return '';
+        const str = String(value);
+        return str.includes('T') ? str.split('T')[0] : str;
+    }
+
+    function formatMonthLabel(date) {
+        return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+
+    function formatSelectedDateLabel(dateKey) {
+        if (!dateKey) return 'All matching trades';
+        return new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+        });
+    }
+
+    function sumTradesPnl(trades) {
+        return trades.reduce((sum, trade) => sum + (parseFloat(trade.pnl) || 0), 0);
+    }
+
+    const GLOW_TARGETS_SELECTOR = [
+        '.stat-card',
+        '.table-wrapper',
+        '.journal-calendar-panel',
+        '.calendar-summary-card',
+        '.strategy-card',
+        '.suggestion-card',
+        '.quant-card',
+        '.signal-card',
+        '.live-price-bar',
+        '.chart-container',
+        '.rl-chart-container',
+        '.modal',
+    ].join(', ');
+
+    let glowTargets = [];
+    let glowPointer = null;
+    let glowFrame = 0;
+
+    function refreshGlowTargets() {
+        glowTargets = Array.from($$(GLOW_TARGETS_SELECTOR));
+        glowTargets.forEach((el) => {
+            el.setAttribute('data-glow', '');
+        });
+    }
+
+    function updateGlowBorders(pointer) {
+        glowFrame = 0;
+
+        glowTargets.forEach((el) => {
+            if (!pointer) {
+                el.style.setProperty('--glow-active', '0');
+                return;
+            }
+
+            const rect = el.getBoundingClientRect();
+            const isInside =
+                pointer.x >= rect.left &&
+                pointer.x <= rect.right &&
+                pointer.y >= rect.top &&
+                pointer.y <= rect.bottom;
+
+            if (!isInside) {
+                el.style.setProperty('--glow-active', '0');
+                return;
+            }
+
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const angle = (Math.atan2(pointer.y - centerY, pointer.x - centerX) * 180) / Math.PI + 90;
+
+            el.style.setProperty('--glow-active', '1');
+            el.style.setProperty('--glow-start', `${angle.toFixed(2)}deg`);
+        });
+    }
+
+    function scheduleGlowUpdate(pointer) {
+        if (pointer) {
+            glowPointer = pointer;
+        }
+
+        if (glowFrame) return;
+
+        glowFrame = requestAnimationFrame(() => {
+            updateGlowBorders(glowPointer);
+        });
+    }
+
+    function initGlowBorders() {
+        refreshGlowTargets();
+
+        document.addEventListener('pointermove', (e) => {
+            scheduleGlowUpdate({ x: e.clientX, y: e.clientY });
+        }, { passive: true });
+
+        document.addEventListener('mouseout', (e) => {
+            if (e.relatedTarget) return;
+            glowPointer = null;
+            updateGlowBorders(null);
+        });
+
+        window.addEventListener('scroll', () => {
+            if (glowPointer) scheduleGlowUpdate(glowPointer);
+        }, { passive: true });
+
+        window.addEventListener('resize', () => {
+            refreshGlowTargets();
+            if (glowPointer) scheduleGlowUpdate(glowPointer);
+        });
+
+        const observer = new MutationObserver(() => {
+            refreshGlowTargets();
+            if (glowPointer) scheduleGlowUpdate(glowPointer);
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
     // ---- State ----
     let allTrades = [];
     let allStrategies = [];
     let deleteTargetId = null;
     let drawerTradeId = null;
+    let selectedJournalDate = null;
+    let journalCalendarMonth = new Date();
+
+    journalCalendarMonth = new Date(journalCalendarMonth.getFullYear(), journalCalendarMonth.getMonth(), 1);
+    initGlowBorders();
 
     // ---- Navigation ----
     const navBtns = $$('.nav-btn');
@@ -134,6 +261,63 @@
             $('#val-avg-rr').textContent = (s.avgRR || 0).toFixed(2);
         } catch (e) { console.error('Stats error:', e); }
     }
+
+    async function loadSecurityStatus() {
+        try {
+            const data = await api('/api/security/status');
+            $('#security-2fa-status').textContent = data.twoFactorEnabled ? 'Enabled' : 'Disabled';
+            $('#security-recovery-mask').textContent = data.recoveryDestinationMasked || 'Account email';
+            $('#security-delivery-mode').textContent = data.mailDeliveryMode === 'email' ? 'Email delivery' : 'Server console fallback';
+            $('#security-recovery-email').value = data.recoveryEmail || '';
+            $('#security-two-factor').checked = Boolean(data.twoFactorEnabled);
+            $('#security-note').textContent = data.mailDeliveryMode === 'email'
+                ? 'TradeVault sends sign-in verification and password recovery codes to your recovery destination.'
+                : 'SMTP is not configured, so sign-in and recovery codes fall back to the server terminal on local setup.';
+        } catch (e) {
+            console.error('Security status error:', e);
+        }
+    }
+
+    $('#security-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = $('#btn-save-security');
+        const currentPassword = $('#security-current-password').value;
+
+        if (!currentPassword) {
+            return showToast('Enter your current password to save security settings');
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+
+        try {
+            const data = await api('/api/security/settings', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    currentPassword,
+                    recoveryEmail: $('#security-recovery-email').value.trim(),
+                    twoFactorEnabled: $('#security-two-factor').checked,
+                }),
+            });
+
+            $('#security-current-password').value = '';
+            $('#security-2fa-status').textContent = data.twoFactorEnabled ? 'Enabled' : 'Disabled';
+            $('#security-recovery-mask').textContent = data.recoveryDestinationMasked || 'Account email';
+            $('#security-delivery-mode').textContent = data.mailDeliveryMode === 'email' ? 'Email delivery' : 'Server console fallback';
+            $('#security-note').textContent = data.mailDeliveryMode === 'email'
+                ? 'TradeVault sends sign-in verification and password recovery codes to your recovery destination.'
+                : 'SMTP is not configured, so sign-in and recovery codes fall back to the server terminal on local setup.';
+
+            showToast(data.twoFactorEnabled
+                ? 'Two-step verification enabled'
+                : 'Security settings updated');
+        } catch (err) {
+            showToast(err.message || 'Failed to save security settings');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Save Security Settings';
+        }
+    });
 
     // ---- Trades ----
     async function loadTrades() {
@@ -209,7 +393,7 @@
         }
     }
 
-    function renderJournal() {
+    function getJournalBaseFilteredTrades() {
         let filtered = [...allTrades];
 
         const query = ($('#search-input').value || '').trim().toLowerCase();
@@ -229,11 +413,112 @@
         const strat = $('#filter-strategy').value;
         if (strat !== 'all') filtered = filtered.filter(t => String(t.strategy_id) === strat);
 
+        return filtered;
+    }
+
+    function getTradesForDate(trades, dateKey) {
+        return trades.filter(t => normalizeDateKey(t.trade_date) === dateKey);
+    }
+
+    function updateJournalSummary(baseFiltered, visibleTrades) {
+        const clearBtn = $('#calendar-clear');
+        const pnlEl = $('#calendar-selected-pnl');
+        const pnl = sumTradesPnl(visibleTrades);
+
+        $('#calendar-month-label').textContent = formatMonthLabel(journalCalendarMonth);
+        $('#calendar-selected-label').textContent = selectedJournalDate
+            ? formatSelectedDateLabel(selectedJournalDate)
+            : (baseFiltered.length === allTrades.length ? 'All trades' : 'All matching trades');
+        $('#calendar-selected-count').textContent = String(visibleTrades.length);
+        $('#calendar-selected-pnl').textContent = formatCurrency(pnl);
+        pnlEl.className = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        clearBtn.classList.toggle('hidden', !selectedJournalDate);
+    }
+
+    function renderJournalCalendar(baseFiltered) {
+        const grid = $('#calendar-grid');
+        const monthStart = new Date(journalCalendarMonth.getFullYear(), journalCalendarMonth.getMonth(), 1);
+        const monthEnd = new Date(journalCalendarMonth.getFullYear(), journalCalendarMonth.getMonth() + 1, 0);
+        const leadingDays = monthStart.getDay();
+        const todayKey = normalizeDateKey(new Date().toISOString());
+
+        const tradesByDate = baseFiltered.reduce((acc, trade) => {
+            const key = normalizeDateKey(trade.trade_date);
+            if (!key) return acc;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(trade);
+            return acc;
+        }, {});
+
+        const cells = [];
+
+        for (let i = 0; i < leadingDays; i++) {
+            cells.push('<div class="calendar-day is-empty" aria-hidden="true"></div>');
+        }
+
+        for (let day = 1; day <= monthEnd.getDate(); day++) {
+            const date = new Date(journalCalendarMonth.getFullYear(), journalCalendarMonth.getMonth(), day);
+            const dateKey = normalizeDateKey(date.toISOString());
+            const dayTrades = tradesByDate[dateKey] || [];
+            const dayPnl = sumTradesPnl(dayTrades);
+            const outcomeClass = dayTrades.length
+                ? (dayPnl > 0 ? 'is-profit' : dayPnl < 0 ? 'is-loss' : 'is-flat')
+                : '';
+            const classes = [
+                'calendar-day',
+                dayTrades.length ? 'has-trades' : '',
+                outcomeClass,
+                dateKey === todayKey ? 'is-today' : '',
+                dateKey === selectedJournalDate ? 'is-selected' : '',
+            ].filter(Boolean).join(' ');
+
+            cells.push(`
+                <button type="button" class="${classes}" data-date="${dateKey}" aria-pressed="${dateKey === selectedJournalDate}">
+                    <span class="calendar-day-number">${day}</span>
+                    <div class="calendar-day-meta">
+                        <span class="calendar-trade-count">${dayTrades.length ? `${dayTrades.length} trade${dayTrades.length === 1 ? '' : 's'}` : 'No trades'}</span>
+                        <span class="calendar-day-pnl ${dayTrades.length ? (dayPnl >= 0 ? 'pnl-positive' : 'pnl-negative') : ''}">${dayTrades.length ? formatCurrency(dayPnl) : '—'}</span>
+                    </div>
+                </button>
+            `);
+        }
+
+        grid.innerHTML = cells.join('');
+
+        grid.querySelectorAll('[data-date]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                selectedJournalDate = btn.dataset.date === selectedJournalDate ? null : btn.dataset.date;
+                renderJournal();
+            });
+        });
+    }
+
+    function renderJournal() {
+        const baseFiltered = getJournalBaseFilteredTrades();
+        const emptyText = $('#journal-empty p');
+
+        if (selectedJournalDate) {
+            const selectedDate = new Date(`${selectedJournalDate}T00:00:00`);
+            journalCalendarMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+        }
+
+        const filtered = selectedJournalDate
+            ? getTradesForDate(baseFiltered, selectedJournalDate)
+            : baseFiltered;
+
+        renderJournalCalendar(baseFiltered);
+        updateJournalSummary(baseFiltered, filtered);
+
         const table = $('#journal-table');
         const empty = $('#journal-empty');
         if (filtered.length === 0) {
             table.classList.add('hidden');
             empty.classList.remove('hidden');
+            emptyText.textContent = allTrades.length === 0
+                ? 'Your journal is empty. Start by adding your first trade.'
+                : selectedJournalDate
+                    ? 'No trades found for the selected day with the current filters.'
+                    : 'No trades match your current journal filters.';
         } else {
             table.classList.remove('hidden');
             empty.classList.add('hidden');
@@ -652,6 +937,26 @@
     $('#filter-direction').addEventListener('change', renderJournal);
     $('#filter-result').addEventListener('change', renderJournal);
     $('#filter-strategy').addEventListener('change', renderJournal);
+    $('#calendar-prev').addEventListener('click', () => {
+        journalCalendarMonth = new Date(journalCalendarMonth.getFullYear(), journalCalendarMonth.getMonth() - 1, 1);
+        selectedJournalDate = null;
+        renderJournal();
+    });
+    $('#calendar-next').addEventListener('click', () => {
+        journalCalendarMonth = new Date(journalCalendarMonth.getFullYear(), journalCalendarMonth.getMonth() + 1, 1);
+        selectedJournalDate = null;
+        renderJournal();
+    });
+    $('#calendar-today').addEventListener('click', () => {
+        const today = new Date();
+        journalCalendarMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        selectedJournalDate = normalizeDateKey(today.toISOString());
+        renderJournal();
+    });
+    $('#calendar-clear').addEventListener('click', () => {
+        selectedJournalDate = null;
+        renderJournal();
+    });
 
     // ---- TradingView Chart ----
     let chartLoaded = false;
@@ -1147,6 +1452,7 @@
         await loadStrategies();
         await loadTrades();
         await loadStats();
+        await loadSecurityStatus();
     }
 
     init();

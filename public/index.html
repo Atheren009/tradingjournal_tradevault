@@ -106,6 +106,13 @@
                 </svg>
                 <span>RL Model</span>
             </button>
+            <button class="nav-btn" data-view="security" id="nav-security">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <path d="M9 12l2 2 4-4" />
+                </svg>
+                <span>Security</span>
+            </button>
         </nav>
         <div class="sidebar-footer">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
@@ -261,6 +268,57 @@
                     <option value="all">All Strategies</option>
                 </select>
             </div>
+        </section>
+        <section class="journal-calendar-panel">
+            <div class="journal-calendar-header">
+                <div>
+                    <span class="journal-calendar-kicker">Trade Calendar</span>
+                    <h3 id="calendar-month-label">Month</h3>
+                </div>
+                <div class="calendar-actions">
+                    <button type="button" class="btn btn-secondary btn-calendar-nav" id="calendar-prev"
+                        aria-label="Previous month">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="15 18 9 12 15 6" />
+                        </svg>
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-calendar-today" id="calendar-today">Today</button>
+                    <button type="button" class="btn btn-secondary btn-calendar-nav" id="calendar-next"
+                        aria-label="Next month">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="journal-calendar-summary">
+                <div class="calendar-summary-card">
+                    <span class="calendar-summary-label">Selected Day</span>
+                    <strong id="calendar-selected-label">All trades</strong>
+                </div>
+                <div class="calendar-summary-card">
+                    <span class="calendar-summary-label">Trade Count</span>
+                    <strong id="calendar-selected-count">0</strong>
+                </div>
+                <div class="calendar-summary-card">
+                    <span class="calendar-summary-label">Day P&amp;L</span>
+                    <strong id="calendar-selected-pnl">+$0.00</strong>
+                </div>
+                <button type="button" class="btn btn-secondary btn-calendar-clear hidden" id="calendar-clear">Clear Day
+                    Filter</button>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+                <span>Sun</span>
+                <span>Mon</span>
+                <span>Tue</span>
+                <span>Wed</span>
+                <span>Thu</span>
+                <span>Fri</span>
+                <span>Sat</span>
+            </div>
+            <div class="calendar-grid" id="calendar-grid"></div>
         </section>
         <div class="table-wrapper">
             <table class="trades-table" id="journal-table">
@@ -580,6 +638,63 @@
                     </div>
                 </div>
             </div>
+        </section>
+    </main>
+
+    <main class="view" id="view-security">
+        <div class="section-header">
+            <h2>Security &amp; Account Recovery</h2>
+        </div>
+        <p class="ai-subtitle">Control two-step verification and choose where TradeVault sends sign-in and account recovery codes.</p>
+
+        <section class="security-grid">
+            <article class="security-card">
+                <span class="security-kicker">Current Status</span>
+                <h3>Sign-in protection</h3>
+                <div class="security-status-list">
+                    <div class="security-status-row">
+                        <span>Two-step verification</span>
+                        <strong id="security-2fa-status">Loading…</strong>
+                    </div>
+                    <div class="security-status-row">
+                        <span>Recovery destination</span>
+                        <strong id="security-recovery-mask">Loading…</strong>
+                    </div>
+                    <div class="security-status-row">
+                        <span>Delivery mode</span>
+                        <strong id="security-delivery-mode">Loading…</strong>
+                    </div>
+                </div>
+                <p class="security-note" id="security-note">TradeVault uses your recovery email for login verification and password reset codes. If no recovery email is set, it falls back to your account email.</p>
+            </article>
+
+            <article class="security-card">
+                <span class="security-kicker">Manage Settings</span>
+                <h3>Update 2FA and recovery email</h3>
+                <form id="security-form" class="security-form" autocomplete="off">
+                    <div class="form-group">
+                        <label class="security-toggle">
+                            <input type="checkbox" id="security-two-factor">
+                            <span class="security-toggle-slider"></span>
+                            <span class="security-toggle-copy">
+                                <strong>Enable two-step verification</strong>
+                                <span>Require a code sent to your recovery destination after password sign-in.</span>
+                            </span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="security-recovery-email">Recovery Email</label>
+                        <input type="email" id="security-recovery-email" placeholder="Optional backup email for sign-in codes">
+                    </div>
+                    <div class="form-group">
+                        <label for="security-current-password">Current Password</label>
+                        <input type="password" id="security-current-password" placeholder="Confirm your current password" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="btn-save-security">Save Security Settings</button>
+                    </div>
+                </form>
+            </article>
         </section>
     </main>
 
